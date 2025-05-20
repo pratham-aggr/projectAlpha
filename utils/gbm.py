@@ -12,17 +12,15 @@ class GBMAnalyzer:
     ----------
     stock_data : pandas.DataFrame
         DataFrame with a datetime index and a 'Close' column containing daily prices.
-
-    Raises
-    ------
-    ValueError
-        If 'Close' column is missing from the input DataFrame.
+    t : float
+        Time horizon in years for GBM projections.
     """
 
-    def __init__(self, stock_data: pd.DataFrame):
+    def __init__(self, stock_data: pd.DataFrame, t: float = 1.0):
         if 'Close' not in stock_data.columns:
             raise ValueError("DataFrame must contain a 'Close' column.")
         self.stock_data = stock_data.sort_index()
+        self.t = t
 
     def _get_prices(self, start_date, end_date):
         """
@@ -101,7 +99,7 @@ class GBMAnalyzer:
         """
         return np.std(GBMAnalyzer.log_return(prices), ddof=1)
 
-    def mean_log_s(self, prices, t, S0):
+    def mean_log_s(self, prices, S0):
         """
         Compute expected log-price E[log(S(t))] under GBM.
 
@@ -109,24 +107,22 @@ class GBMAnalyzer:
         ----------
         prices : np.ndarray
             Array of daily closing prices.
-        t : float
-            Time horizon in years.
         S0 : float
             Initial stock price at time 0.
 
         Returns
         -------
         float
-            Expected log-price at time t.
+            Expected log-price at time t (self.t).
         """
         mu_daily = self.mean_log_return(prices)
         sigma_daily = self.sigma(prices)
         mu_annual = mu_daily * 252
         sigma_annual = sigma_daily * np.sqrt(252)
-        drift = (mu_annual - 0.5 * sigma_annual**2) * t
+        drift = (mu_annual - 0.5 * sigma_annual**2) * self.t
         return np.log(S0) + drift
 
-    def std_log_s(self, prices, t):
+    def std_log_s(self, prices):
         """
         Compute the standard deviation of log-price under GBM.
 
@@ -134,17 +130,15 @@ class GBMAnalyzer:
         ----------
         prices : np.ndarray
             Array of daily closing prices.
-        t : float
-            Time horizon in years.
 
         Returns
         -------
         float
-            Standard deviation of log(S(t)).
+            Standard deviation of log(S(t)) at time t (self.t).
         """
         sigma_daily = self.sigma(prices)
         sigma_annual = sigma_daily * np.sqrt(252)
-        return sigma_annual * np.sqrt(t)
+        return sigma_annual * np.sqrt(self.t)
 
     def gbm_log_stats(self, start_date, end_date):
         """
@@ -160,9 +154,9 @@ class GBMAnalyzer:
         Returns
         -------
         mean : float
-            Expected log-price at time t.
+            Expected log-price at time t (self.t).
         std : float
-            Standard deviation of log-price at time t.
+            Standard deviation of log-price at time t (self.t).
 
         Raises
         ------
@@ -171,10 +165,8 @@ class GBMAnalyzer:
         """
         prices = self._get_prices(start_date, end_date)
         S0 = prices[0]
-        t_days = (pd.to_datetime(end_date) - pd.to_datetime(start_date)).days
-        t_years = t_days / 365.0
-        mean = self.mean_log_s(prices, t_years, S0)
-        std = self.std_log_s(prices, t_years)
+        mean = self.mean_log_s(prices, S0)
+        std = self.std_log_s(prices)
         return mean, std
 
     def confidence_interval(self, start_date, end_date, num_std=2):
